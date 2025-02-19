@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  forecast_app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      # Override the secret key as needed.
+      - SECRET_KEY=your_secret_key_here
+    volumes:
+      # Mount the current directory for development.
+      - .:/app

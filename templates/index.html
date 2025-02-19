@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <h2 class="mb-4">Select Forecast Approach and Upload CSV</h2>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert alert-danger">
+          <ul class="mb-0">
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endwith %}
+    <form action="{{ url_for('main.forecast_route') }}" method="post" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label for="forecast_type" class="form-label">Forecast Approach:</label>
+        <select class="form-select" name="forecast_type" id="forecast_type">
+          {% for option in forecast_options %}
+            <option value="{{ option.value }}">{{ option.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="datafile" class="form-label">CSV File:</label>
+        <input class="form-control" type="file" name="datafile" id="datafile" accept=".csv">
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary">Upload and Forecast</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

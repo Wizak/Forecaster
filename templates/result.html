@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container text-center">
+  <h2>{{ forecast_type }} Result</h2>
+  <p>MAPE for the last six months: {{ mape|round(2) }}%</p>
+  <!-- Preview image triggers the modal -->
+  <div>
+    <img id="forecastImg" src="data:image/png;base64,{{ img_data }}" alt="Forecast Plot" class="img-fluid" style="cursor:pointer;">
+  </div>
+  <br>
+  <a href="/" class="btn btn-secondary">Try another file</a>
+</div>
+
+<!-- Modal for interactive forecast view -->
+<div class="modal fade" id="imgModal" tabindex="-1" aria-labelledby="imgModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="imgModalLabel">{{ forecast_type }} - Detailed Forecast</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Image container for zooming and panning -->
+        <div id="imgContainer" style="overflow: hidden; position: relative; max-height:80vh;">
+          <img id="modalImg" src="data:image/png;base64,{{ img_data }}" alt="Forecast Plot" class="img-fluid" style="transition: transform 0.2s;">
+        </div>
+        <!-- Zoom control buttons -->
+        <div class="zoom-controls mt-3">
+          <button id="zoomInBtn" class="btn btn-primary">Zoom In</button>
+          <button id="zoomOutBtn" class="btn btn-primary">Zoom Out</button>
+          <button id="resetZoomBtn" class="btn btn-secondary">Reset Zoom</button>
+        </div>
+        <!-- Evaluation background with module description -->
+        <div class="evaluation-background mt-3 p-3 bg-light border rounded">
+          <p>{{ module_description }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JavaScript for modal, zooming, and panning -->
+<script>
+  // Open modal when preview image is clicked
+  document.getElementById("forecastImg").addEventListener("click", function() {
+    var modal = new bootstrap.Modal(document.getElementById('imgModal'));
+    modal.show();
+  });
+
+  // Improved zoom and pan state variables
+  const modalImg = document.getElementById("modalImg");
+  let scale = 1;
+  let translateX = 0, translateY = 0;
+  let isDragging = false;
+  let startX, startY;
+
+  // Function to update CSS transform
+  function updateTransform() {
+      modalImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+  }
+
+  // Zoom controls
+  document.getElementById("zoomInBtn").addEventListener("click", function(){
+      scale += 0.1;
+      updateTransform();
+  });
+  document.getElementById("zoomOutBtn").addEventListener("click", function(){
+      scale = Math.max(0.1, scale - 0.1);
+      updateTransform();
+  });
+  document.getElementById("resetZoomBtn").addEventListener("click", function(){
+      scale = 1;
+      translateX = 0;
+      translateY = 0;
+      updateTransform();
+  });
+
+  // Panning functionality using mouse events on the image
+  modalImg.addEventListener("mousedown", function(e) {
+      isDragging = true;
+      startX = e.clientX - translateX;
+      startY = e.clientY - translateY;
+      modalImg.style.cursor = "grabbing";
+  });
+  document.addEventListener("mouseup", function() {
+      isDragging = false;
+      modalImg.style.cursor = "grab";
+  });
+  document.addEventListener("mousemove", function(e) {
+      if (!isDragging) return;
+      translateX = e.clientX - startX;
+      translateY = e.clientY - startY;
+      updateTransform();
+  });
+
+  // Set initial cursor style
+  modalImg.style.cursor = "grab";
+</script>
+{% endblock %}
