@@ -17,7 +17,7 @@
     <form action="{{ url_for('main.forecast_route') }}" method="post" enctype="multipart/form-data">
       <div class="mb-3">
         <label for="forecast_type" class="form-label">Forecast Approach:</label>
-        <select class="form-select" name="forecast_type" id="forecast_type">
+        <select class="form-select" name="forecast_type" id="forecast_type" required>
           {% for option in forecast_options %}
             <option value="{{ option.value }}">{{ option.name }}</option>
           {% endfor %}
@@ -25,12 +25,113 @@
       </div>
       <div class="mb-3">
         <label for="datafile" class="form-label">CSV File:</label>
-        <input class="form-control" type="file" name="datafile" id="datafile" accept=".csv">
+        <input class="form-control" type="file" name="datafile" id="datafile" accept=".csv" required>
       </div>
-      <div>
-        <button type="submit" class="btn btn-primary">Upload and Forecast</button>
+      <div class="mb-3" id="prophetContainer" style="display: none;">
+        <label for="training_cutoff_date" class="form-label">Training Cutoff Date:</label>
+        <input class="form-control" type="date" name="training_cutoff_date" id="training_cutoff_date">
+        <label for="forecast_days_ahead" class="form-label mt-2">Forecast Days Ahead:</label>
+        <input class="form-control" type="number" name="forecast_days_ahead" id="forecast_days_ahead" value="30">
       </div>
+      <div class="mb-3" id="trainDatesContainer" style="display: none;">
+        <label for="train_start_date" class="form-label">Train Start Date:</label>
+        <input class="form-control" type="date" name="train_start_date" id="train_start_date">
+        <label for="train_end_date" class="form-label mt-2">Train End Date:</label>
+        <input class="form-control" type="date" name="train_end_date" id="train_end_date">
+      </div>
+      <div class="mb-3" id="testDatesContainer" style="display: none;">
+        <label for="test_start_date" class="form-label mt-2">Test Start Date:</label>
+        <input class="form-control" type="date" name="test_start_date" id="test_start_date">
+        <label for="test_end_date" class="form-label mt-2">Test End Date:</label>
+        <input class="form-control" type="date" name="test_end_date" id="test_end_date">
+      </div>
+      <div class="mb-3" id="forecastDatesContainer" style="display: none;">
+        <label for="forecast_start_date" class="form-label mt-2">Forecast Start Date:</label>
+        <input class="form-control" type="date" name="forecast_start_date" id="forecast_start_date">
+        <label for="forecast_end_date" class="form-label mt-2">Forecast End Date:</label>
+        <input class="form-control" type="date" name="forecast_end_date" id="forecast_end_date">
+      </div>
+      <button type="submit" class="btn btn-primary">Upload and Forecast</button>
     </form>
   </div>
 </div>
+<script>
+  const forecastSelect = document.getElementById('forecast_type');
+  const prophetContainer = document.getElementById('prophetContainer');
+  const trainDatesContainer = document.getElementById('trainDatesContainer');
+  const testDatesContainer = document.getElementById('testDatesContainer');
+  const forecastDatesContainer = document.getElementById('forecastDatesContainer');
+
+  const trainStartDate = document.getElementById('train_start_date');
+  const trainEndDate   = document.getElementById('train_end_date');
+  const testStartDate  = document.getElementById('test_start_date');
+  const testEndDate    = document.getElementById('test_end_date');
+  const forecastStartDate = document.getElementById('forecast_start_date');
+  const forecastEndDate   = document.getElementById('forecast_end_date');
+
+  function toggleFields() {
+    const type = forecastSelect.value;
+
+    prophetContainer.style.display = "none";
+    trainDatesContainer.style.display = "none";
+    testDatesContainer.style.display = "none";
+    forecastDatesContainer.style.display = "none";
+
+    trainStartDate.removeAttribute('required');
+    trainEndDate.removeAttribute('required');
+    testStartDate.removeAttribute('required');
+    testEndDate.removeAttribute('required');
+    forecastStartDate.removeAttribute('required');
+    forecastEndDate.removeAttribute('required');
+
+    if (type === "prophet") {
+      prophetContainer.style.display = "block";
+    } else if (type === "lstm") {
+      trainDatesContainer.style.display = "block";
+      testDatesContainer.style.display = "block";
+      forecastDatesContainer.style.display = "block";
+
+      trainStartDate.setAttribute('required', true);
+      trainEndDate.setAttribute('required', true);
+      testStartDate.setAttribute('required', true);
+      testEndDate.setAttribute('required', true);
+      forecastStartDate.setAttribute('required', true);
+      forecastEndDate.setAttribute('required', true);
+    } else if (type === "lstm_multiservice") {
+      trainDatesContainer.style.display = "block";
+      testDatesContainer.style.display = "block";
+      forecastDatesContainer.style.display = "block";
+
+      trainStartDate.setAttribute('required', true);
+      trainEndDate.setAttribute('required', true);
+      testStartDate.setAttribute('required', true);
+      testEndDate.setAttribute('required', true);
+      forecastStartDate.setAttribute('required', true);
+      forecastEndDate.setAttribute('required', true);
+    } else if (type === "lstm_multiservice_aggregate") {
+      forecastDatesContainer.style.display = "block";
+
+      forecastStartDate.setAttribute('required', true);
+      forecastEndDate.setAttribute('required', true);
+    } else if (type === "holtwinters") {
+      forecastDatesContainer.style.display = "block";
+
+      forecastStartDate.setAttribute('required', true);
+      forecastEndDate.setAttribute('required', true);
+    } else if (type === "lstm_univariate") {
+      forecastDatesContainer.style.display = "block";
+
+      forecastStartDate.setAttribute('required', true);
+      forecastEndDate.setAttribute('required', true);
+    } else if (type === "lstm_multivariate") {
+      forecastDatesContainer.style.display = "block";
+
+      forecastStartDate.setAttribute('required', true);
+      forecastEndDate.setAttribute('required', true);
+    };
+  };
+
+  forecastSelect.addEventListener('change', toggleFields);
+  toggleFields();
+</script>
 {% endblock %}

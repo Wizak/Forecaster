@@ -1,53 +1,50 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import io
-import base64
-from statsmodels.tsa.statespace.sarimax import SARIMAX
+from scipy.stats import boxcox
+import statsmodels.api as sm
 from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.preprocessing import MinMaxScaler
 
-def read_csv(file_stream):
-    """Read CSV and preprocess for Holt-Winters/SARIMA forecasting."""
-    data = pd.read_csv(file_stream)
-    data['ds'] = pd.to_datetime(data['date'])
-    data = data.rename(columns={'orders_count': 'y'})
-    data.set_index('ds', inplace=True)
-    data.sort_index(inplace=True)
-    data = data.asfreq('D', method='bfill')
-    data.ffill(inplace=True)
-    return data
+def read_csv(file_input):
+    df = pd.read_csv(file_input)
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.rename(columns={'date': 'ds', 'orders_count': 'y'})
+    df.sort_values(by='ds', inplace=True)
+    return df
 
-def run_forecast(data):
-    """
-    Fit a SARIMAX model (as a proxy for Holt-Winters with Brutlag)
-    and produce a forecast plot for a 28-day horizon.
-    """
-    train_size = int(len(data)*0.8)
-    train = data.iloc[:train_size]
-    test = data.iloc[train_size:]
-    try:
-        model = SARIMAX(train['y'], order=(4,1,2), seasonal_order=(4,1,1,7))
-        results = model.fit(disp=False)
-    except Exception as e:
-        raise Exception(f"Error fitting SARIMAX: {e}")
-    test_forecast = results.get_forecast(steps=len(test)).predicted_mean
-    mape = mean_absolute_percentage_error(test['y'], test_forecast)*100
-    future_steps = 28
-    future_forecast = results.get_forecast(steps=future_steps).predicted_mean
-    future_index = pd.date_range(start=data.index[-1], periods=future_steps+1, closed='right')
-    
-    plt.figure(figsize=(10,6))
-    plt.plot(data.index, data['y'], label='Historical')
-    plt.plot(test.index, test_forecast, label='Test Forecast', linestyle='--')
-    plt.plot(future_index, future_forecast, label='Future Forecast', linestyle='--', color='red')
-    plt.xlabel('Date')
-    plt.ylabel('Orders Count')
-    plt.title('Holt-Winters/SARIMAX Forecast')
-    plt.legend()
-    plt.grid()
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plt.close()
-    img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-    return img_base64, mape
+def invboxcox(y, lmbda):
+    return np.exp(y) if lmbda == 0 else np.exp(np.log(lmbda * y + 1) / lmbda)
+
+def run_forecast_table(file_input, forecast_start, forecast_end):
+    df = read_csv(file_input)
+    df.set_index('ds', inplace=True)
+    df.sort_index(inplace=True)
+    df = df.asfreq('D', method='bfill')
+    df.ffill(inplace=True)
+    df['y_box'], lmbda = boxcox(df['y'] + 1)
+    best_model = sm.tsa.statespace.SARIMAX(df['y_box'], order=(4,1,2), seasonal_order=(4,1,0,7)).fit(disp=-1)
+    df['model'] = invboxcox(best_model.fittedvalues, lmbda)
+    forecast_steps = (pd.to_datetime(forecast_end) - pd.to_datetime(forecast_start)).days + 1
+    forecast_box = best_model.predict(start=df.shape[0], end=df.shape[0] + forecast_steps - 1)
+    forecast_values = invboxcox(forecast_box, lmbda)
+    forecast_dates = pd.date_range(start=forecast_start, end=forecast_end)
+    forecast_series = {"type": "forecast", "data": []}
+    for dte, v in zip(forecast_dates, forecast_values):
+        forecast_series["data"].append({"x": str(dte.date()), "y": float(v)})
+    actual_series = {"type": "actual", "data": []}
+    for dte, v in zip(df.index, df['y'].values):
+        actual_series["data"].append({"x": str(dte.date()), "y": float(v)})
+    mape = mean_absolute_percentage_error(df['y'].values, df['model'].values) * 100
+    # Normalize output data
+    all_points = forecast_series["data"] + actual_series["data"]
+    all_vals = np.array([pt["y"] for pt in all_points]).reshape(-1, 1)
+    scaler_out = MinMaxScaler((0, 1))
+    scaled_vals = scaler_out.fit_transform(all_vals)
+    idx = 0
+    for pt in forecast_series["data"]:
+        pt["y"] = float(scaled_vals[idx, 0])
+        idx += 1
+    for pt in actual_series["data"]:
+        pt["y"] = float(scaled_vals[idx, 0])
+        idx += 1
+    return [forecast_series, actual_series], mape

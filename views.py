@@ -1,116 +1,133 @@
 from flask import Blueprint, render_template, request, redirect, flash, url_for
 import pandas as pd
-
 from forecast import (
-    prophet_forecast, lstm_forecast, lstm_multiservice_forecast, 
-    lstm_multiservice_aggregate_forecast, holtwinters_forecast,
-    lstm_univariate_forecast, lstm_multivariate_forecast,
-    lstm_multivariate_interval_forecast, lstm_multivariate_forecast_v2,
+    prophet_forecast,
+    lstm_forecast,
+    lstm_multiservice_forecast,
+    lstm_multiservice_aggregate_forecast,
+    holtwinters_forecast,
+    lstm_univariate_forecast,
+    lstm_multivariate_forecast,
+    lstm_multivariate_interval_forecast,
+    lstm_multivariate_forecast_v2,
     hybrid_prophet_xgboost_forecast
 )
-# Import the dictionary of descriptions
 from descriptions import FORECAST_DESCRIPTIONS
+
+forecast_options = [
+    {"name": "Prophet Forecast", "value": "prophet"},
+    {"name": "Base LSTM Forecast", "value": "lstm"},
+    {"name": "LSTM Multiservice Forecast", "value": "lstm_multiservice"},
+    {"name": "LSTM Multiservice Aggregate Forecast", "value": "lstm_multiservice_aggregate"},
+    {"name": "Holt-Winters Forecast", "value": "holtwinters"},
+    {"name": "LSTM Univariate Forecast", "value": "lstm_univariate"},
+    {"name": "LSTM Multivariate Forecast", "value": "lstm_multivariate"},
+    {"name": "LSTM Multivariate Interval Forecast", "value": "lstm_multivariate_interval"},
+    {"name": "LSTM Multivariate Forecast v2", "value": "lstm_multivariate_v2"},
+    {"name": "Hybrid Prophet-XGBoost Forecast", "value": "hybrid_prophet_xgboost"}
+]
 
 main_blueprint = Blueprint('main', __name__)
 
 @main_blueprint.route('/', methods=['GET'])
 def index():
-    forecast_options = [
-        {"name": "Prophet Forecast", "value": "prophet"},
-        {"name": "Base LSTM Forecast", "value": "lstm"},
-        {"name": "LSTM Multiservice Forecast", "value": "lstm_multiservice"},
-        {"name": "LSTM Multiservice Aggregate Forecast", "value": "lstm_multiservice_aggregate"},
-        {"name": "Holt-Winters Forecast", "value": "holtwinters"},
-        {"name": "LSTM Univariate Forecast", "value": "lstm_univariate"},
-        {"name": "LSTM Multivariate Forecast", "value": "lstm_multivariate"},
-        {"name": "LSTM Multivariate Interval Forecast", "value": "lstm_multivariate_interval"},
-        {"name": "LSTM Multivariate Forecast v2", "value": "lstm_multivariate_v2"},
-        {"name": "Hybrid Prophet-XGBoost Forecast", "value": "hybrid_prophet_xgboost"}
-    ]
     return render_template('index.html', forecast_options=forecast_options)
 
 @main_blueprint.route('/forecast', methods=['POST'])
 def forecast_route():
     forecast_type = request.form.get("forecast_type")
-    if 'datafile' not in request.files:
-        flash("No file part")
-        return redirect(url_for('main.index'))
-    file = request.files['datafile']
-    if file.filename == "":
+    file = request.files.get("datafile")
+    if not file or file.filename == "":
         flash("No file selected")
         return redirect(url_for('main.index'))
-
+    mape_val = None
     try:
         if forecast_type == "prophet":
-            data = prophet_forecast.read_csv(file)
-            # example if you call both train and run
-            future_holidays = [
-                pd.Timestamp('2025-01-20'),
-                pd.Timestamp('2025-02-14'),
-                pd.Timestamp('2025-03-17')
-            ]
-            model, forecast = prophet_forecast.train_forecast_model(data, future_holidays)
-            img_base64, mape = prophet_forecast.run_forecast(data, forecast)
-            label = "Prophet Forecast"
-
+            training_cutoff_date = request.form.get("training_cutoff_date")
+            forecast_days_ahead = request.form.get("forecast_days_ahead")
+            data, mape_val = prophet_forecast.run_forecast_table(
+                file,
+                training_cutoff_date=training_cutoff_date if training_cutoff_date else None,
+                forecast_days_ahead=int(forecast_days_ahead) if forecast_days_ahead else 30,
+                future_holidays=[pd.Timestamp('2025-01-20'),
+                                 pd.Timestamp('2025-02-14'),
+                                 pd.Timestamp('2025-03-17')]
+            )
         elif forecast_type == "lstm":
-            data = lstm_forecast.read_csv(file)
-            img_base64, mape = lstm_forecast.run_forecast(data)
-            label = "Base LSTM Forecast"
-
+            train_start = request.form.get("train_start_date")
+            train_end = request.form.get("train_end_date")
+            test_start = request.form.get("test_start_date")
+            test_end = request.form.get("test_end_date")
+            forecast_start = request.form.get("forecast_start_date")
+            forecast_end = request.form.get("forecast_end_date")
+            data, mape_val = lstm_forecast.run_forecast_table(
+                file,
+                train_start=train_start,
+                train_end=train_end,
+                test_start=test_start,
+                test_end=test_end,
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+            )
         elif forecast_type == "lstm_multiservice":
-            data = lstm_multiservice_forecast.read_csv(file)
-            img_base64, mape = lstm_multiservice_forecast.run_forecast(data)
-            label = "LSTM Multiservice Forecast"
-
+            train_start = request.form.get("train_start_date")
+            train_end = request.form.get("train_end_date")
+            test_start = request.form.get("test_start_date")
+            test_end = request.form.get("test_end_date")
+            forecast_start = request.form.get("forecast_start_date")
+            forecast_end = request.form.get("forecast_end_date")
+            data, mape_val = lstm_multiservice_forecast.run_forecast_table(
+                file,
+                train_start=train_start,
+                train_end=train_end,
+                test_start=test_start,
+                test_end=test_end,
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+            )
         elif forecast_type == "lstm_multiservice_aggregate":
-            data = lstm_multiservice_aggregate_forecast.read_csv(file)
-            img_base64, mape = lstm_multiservice_aggregate_forecast.run_forecast(data)
-            label = "LSTM Multiservice Aggregate Forecast"
-
+            forecast_start = request.form.get("forecast_start_date")
+            forecast_end = request.form.get("forecast_end_date")
+            data = lstm_multiservice_aggregate_forecast.run_forecast_table(
+                file,
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+            )
         elif forecast_type == "holtwinters":
-            data = holtwinters_forecast.read_csv(file)
-            img_base64, mape = holtwinters_forecast.run_forecast(data)
-            label = "Holt-Winters Forecast"
-
+            forecast_start = request.form.get("forecast_start_date")
+            forecast_end = request.form.get("forecast_end_date")
+            data, mape_val = holtwinters_forecast.run_forecast_table(
+                file,
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+            )
         elif forecast_type == "lstm_univariate":
-            data = lstm_univariate_forecast.read_csv(file)
-            img_base64, mape = lstm_univariate_forecast.run_forecast(data)
-            label = "LSTM Univariate Forecast"
-
+            forecast_start = request.form.get("forecast_start_date")
+            forecast_end = request.form.get("forecast_end_date")
+            data = lstm_univariate_forecast.run_forecast_table(
+                file,
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+            )
         elif forecast_type == "lstm_multivariate":
-            data = lstm_multivariate_forecast.read_csv(file)
-            img_base64, mape = lstm_multivariate_forecast.run_forecast(data)
-            label = "LSTM Multivariate Forecast"
-
-        elif forecast_type == "lstm_multivariate_interval":
-            data = lstm_multivariate_interval_forecast.read_csv(file)
-            img_base64, mape = lstm_multivariate_interval_forecast.run_forecast(data)
-            label = "LSTM Multivariate Interval Forecast"
-
-        elif forecast_type == "lstm_multivariate_v2":
-            data = lstm_multivariate_forecast_v2.read_csv(file)
-            img_base64, mape = lstm_multivariate_forecast_v2.run_forecast(data)
-            label = "LSTM Multivariate Forecast v2"
-
-        elif forecast_type == "hybrid_prophet_xgboost":
-            data = hybrid_prophet_xgboost_forecast.read_csv(file)
-            img_base64, mape = hybrid_prophet_xgboost_forecast.run_forecast(data)
-            label = "Hybrid Prophet-XGBoost Forecast"
-
+            forecast_start = request.form.get("forecast_start_date")
+            forecast_end = request.form.get("forecast_end_date")
+            data = lstm_multivariate_forecast.run_forecast_table(
+                file,
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+            )
         else:
-            flash("Invalid forecast approach selected")
+            flash("Invalid forecast approach selected.")
             return redirect(url_for('main.index'))
         
-        # Retrieve the description text from the dictionary (default to an empty string if not found)
-        module_description = FORECAST_DESCRIPTIONS.get(forecast_type, "")
-
+        description = FORECAST_DESCRIPTIONS.get(forecast_type, "")
         return render_template(
             'result.html',
-            img_data=img_base64,
-            mape=mape,
-            forecast_type=label,
-            module_description=module_description
+            forecast_type=list(filter(lambda x: x["value"] == forecast_type, forecast_options))[0]["name"],
+            data=data,
+            mape=mape_val,
+            module_description=description
         )
     except Exception as e:
         flash(f"An error occurred: {e}")

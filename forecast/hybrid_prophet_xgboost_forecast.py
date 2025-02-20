@@ -1,17 +1,13 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from datetime import timedelta
-import io
-import base64
-from xgboost import XGBRegressor
 from prophet import Prophet
+from xgboost import XGBRegressor
 
-def read_csv(file_stream):
-    """Read CSV and preprocess for hybrid Prophet-XGBoost forecasting."""
-    data = pd.read_csv(file_stream)
+def read_csv(file_path):
+    data = pd.read_csv(file_path)
     data["date"] = pd.to_datetime(data["date"])
-    # Generate a complete date range
+    # Create full date range and merge
     start_date = data["date"].min()
     end_date = data["date"].max()
     date_range = pd.date_range(start_date, end_date)
@@ -25,19 +21,23 @@ def read_csv(file_stream):
     full_data.set_index("date", inplace=True)
     return full_data
 
-def run_forecast(data):
-    """Hybrid forecast using XGBoost and Prophet, then merging forecasts."""
-    # XGBoost part
-    X = data[["is_holiday", "day_of_week", "month"]]
+def run_forecast_table(data):
+    """
+    Hybrid approach: we train an XGBoost model and a Prophet model.
+    For simplicity, we will use the Prophet forecast for the 28-day horizon.
+    """
+    # XGBoost part (not used for final table here)
+    X = data[["is_holiday","day_of_week","month"]]
     y = data["orders_count"]
     train_size = int(len(data)*0.8)
     X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
     y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
     xgb = XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=5, random_state=42)
     xgb.fit(X_train, y_train)
-    xgb_forecast = xgb.predict(X_test)
+
     # Prophet part
     prophet_data = data.reset_index().rename(columns={"date": "ds", "orders_count": "y"})
+    prophet_data["is_holiday"] = prophet_data["is_holiday"].astype(int)
     m = Prophet(yearly_seasonality=True, weekly_seasonality=True)
     m.add_regressor("is_holiday")
     m.add_regressor("day_of_week")
@@ -48,24 +48,20 @@ def run_forecast(data):
     future["day_of_week"] = future["ds"].dt.dayofweek
     future["month"] = future["ds"].dt.month
     prophet_forecast = m.predict(future)
-    # Merge forecasts for the future 28 days
-    forecast_steps = 28
-    future_index = [data.index[-1] + timedelta(days=i) for i in range(1, forecast_steps+1)]
-    prophet_future = prophet_forecast.tail(forecast_steps)["yhat"].values
-    # For simplicity, take average of XGBoost and Prophet forecasts for the future
-    hybrid_forecast = (prophet_future)  # In a full implementation, you would also forecast XGBoost for the future
-    plt.figure(figsize=(12,6))
-    plt.plot(data.index, data["orders_count"], label="Historical", marker="o")
-    plt.plot(future_index, hybrid_forecast, label="Hybrid Forecast", linestyle="--", color="red")
-    plt.xlabel("Date")
-    plt.ylabel("Orders Count")
-    plt.title("Hybrid Prophet & XGBoost Forecast")
-    plt.legend()
-    plt.grid()
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close()
-    img_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-    dummy_mape = 0.0
-    return img_base64, dummy_mape
+    forecast_28 = prophet_forecast.tail(28)
+    forecast_table = []
+    for _, row in forecast_28.iterrows():
+        forecast_table.append({
+            'ds': str(row['ds'].date()),
+            'yhat': float(row['yhat']),
+            'yhat_lower': float(row['yhat_lower']),
+            'yhat_upper': float(row['yhat_upper'])
+        })
+    historical_table = []
+    for idx, row in data.reset_index().iterrows():
+        historical_table.append({
+            'ds': str(row['date'].date()),
+            'y': float(row['orders_count'])
+        })
+    mape_val = 0.0
+    return historical_table, forecast_table, mape_val

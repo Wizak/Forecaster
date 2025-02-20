@@ -2,98 +2,103 @@
 {% block content %}
 <div class="container text-center">
   <h2>{{ forecast_type }} Result</h2>
+  {% if mape is not none %}
   <p>MAPE for the last six months: {{ mape|round(2) }}%</p>
-  <!-- Preview image triggers the modal -->
-  <div>
-    <img id="forecastImg" src="data:image/png;base64,{{ img_data }}" alt="Forecast Plot" class="img-fluid" style="cursor:pointer;">
+  {% endif %}
+  
+  <div id="forecastChart" style="width:100%; height:600px;"></div>
+  <div class="mt-3">
+    <h4>Module Description</h4>
+    <p>{{ module_description }}</p>
   </div>
   <br>
   <a href="/" class="btn btn-secondary">Try another file</a>
 </div>
 
-<!-- Modal for interactive forecast view -->
-<div class="modal fade" id="imgModal" tabindex="-1" aria-labelledby="imgModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="imgModalLabel">{{ forecast_type }} - Detailed Forecast</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <!-- Image container for zooming and panning -->
-        <div id="imgContainer" style="overflow: hidden; position: relative; max-height:80vh;">
-          <img id="modalImg" src="data:image/png;base64,{{ img_data }}" alt="Forecast Plot" class="img-fluid" style="transition: transform 0.2s;">
-        </div>
-        <!-- Zoom control buttons -->
-        <div class="zoom-controls mt-3">
-          <button id="zoomInBtn" class="btn btn-primary">Zoom In</button>
-          <button id="zoomOutBtn" class="btn btn-primary">Zoom Out</button>
-          <button id="resetZoomBtn" class="btn btn-secondary">Reset Zoom</button>
-        </div>
-        <!-- Evaluation background with module description -->
-        <div class="evaluation-background mt-3 p-3 bg-light border rounded">
-          <p>{{ module_description }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- JavaScript for modal, zooming, and panning -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <script>
-  // Open modal when preview image is clicked
-  document.getElementById("forecastImg").addEventListener("click", function() {
-    var modal = new bootstrap.Modal(document.getElementById('imgModal'));
-    modal.show();
-  });
+  var DATA = {{ data|tojson }};
+  console.log(DATA)
 
-  // Improved zoom and pan state variables
-  const modalImg = document.getElementById("modalImg");
-  let scale = 1;
-  let translateX = 0, translateY = 0;
-  let isDragging = false;
-  let startX, startY;
+  function buildTrace(type, humanName, color, extraProps={}) {
+    var filtered = DATA.find(item => item.type === type);
+    if (filtered) {
+      data = filtered.data;
+      return {
+        x: data.map(item => item.x),
+        y: data.map(item => item.y),
+        mode: 'lines+markers',
+        name: humanName,
+        line: { color: color },
+        ...extraProps,
+      };
+    }
+    return false;
+  };
 
-  // Function to update CSS transform
-  function updateTransform() {
-      modalImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
-  }
+  var traceTrainActual = buildTrace("train_actual", "Training Actual", "blue");
+  var traceTrainPred = buildTrace("train_pred", "Training Prediction", "orange");
+  var traceTestActual = buildTrace("test_actual", "Testing Actual", "green");
+  var traceTestPred = buildTrace("test_pred", "Testing Prediction", "red");
 
-  // Zoom controls
-  document.getElementById("zoomInBtn").addEventListener("click", function(){
-      scale += 0.1;
-      updateTransform();
-  });
-  document.getElementById("zoomOutBtn").addEventListener("click", function(){
-      scale = Math.max(0.1, scale - 0.1);
-      updateTransform();
-  });
-  document.getElementById("resetZoomBtn").addEventListener("click", function(){
-      scale = 1;
-      translateX = 0;
-      translateY = 0;
-      updateTransform();
-  });
+  var traceActual = buildTrace("actual", "Actual", "blue");
+  var traceForecast = buildTrace("forecast", "Forecast", "green");
 
-  // Panning functionality using mouse events on the image
-  modalImg.addEventListener("mousedown", function(e) {
-      isDragging = true;
-      startX = e.clientX - translateX;
-      startY = e.clientY - translateY;
-      modalImg.style.cursor = "grabbing";
-  });
-  document.addEventListener("mouseup", function() {
-      isDragging = false;
-      modalImg.style.cursor = "grab";
-  });
-  document.addEventListener("mousemove", function(e) {
-      if (!isDragging) return;
-      translateX = e.clientX - startX;
-      translateY = e.clientY - startY;
-      updateTransform();
-  });
+  var traceActual1 = buildTrace("actual_1", "Actual 1", "blue");
+  var traceActual2 = buildTrace("actual_2", "Actual 2", "blue");
+  var traceActual3 = buildTrace("actual_3", "Actual 3", "blue");
 
-  // Set initial cursor style
-  modalImg.style.cursor = "grab";
+  var traceForecast1 = buildTrace("forecast_1", "Forecast 1", "green");
+  var traceForecast2 = buildTrace("forecast_2", "Forecast 2", "green");
+  var traceForecast3 = buildTrace("forecast_3", "Forecast 3", "green");
+
+  var traceTrueFuture1 = buildTrace("true_future_1", "True Future 1", "red");
+  var traceTrueFuture2 = buildTrace("true_future_2", "True Future 2", "red");
+  var traceTrueFuture3 = buildTrace("true_future_3", "True Future 3", "red");
+
+  var traceActualService1 = buildTrace("actual_service_1", "Service 1 Actual", "blue");
+  var traceActualService2 = buildTrace("actual_service_2", "Service 2 Actual", "blue");
+  var traceActualService3 = buildTrace("actual_service_3", "Service 3 Actual", "blue");
+  var traceActualService4 = buildTrace("actual_service_4", "Service 4 Actual", "blue");
+
+  var traceForecastService1 = buildTrace("forecast_service_1", "Service 1 Forecast", "green");
+  var traceForecastService2 = buildTrace("forecast_service_2", "Service 2 Forecast", "green");
+  var traceForecastService3 = buildTrace("forecast_service_3", "Service 3 Forecast", "green");
+  var traceForecastService4 = buildTrace("forecast_service_4", "Service 4 Forecast", "green");
+
+
+  var data = [
+    traceTrainActual, 
+    traceTrainPred, 
+    traceTestActual, 
+    traceTestPred,
+    traceActual,
+    traceForecast,
+    traceActual1,
+    traceActual2,
+    traceActual3,
+    traceForecast1,
+    traceForecast2,
+    traceForecast3,
+    traceTrueFuture1,
+    traceTrueFuture2,
+    traceTrueFuture3,
+    traceActualService1,
+    traceActualService2,
+    traceActualService3,
+    traceActualService4,
+    traceForecastService1,
+    traceForecastService2,
+    traceForecastService3,
+    traceForecastService4,
+  ].filter(item => item !== false);
+  
+  var layout = {
+    xaxis: { title: 'Date', type: 'date' },
+    yaxis: { title: 'Orders Count (normalized)' },
+    dragmode: 'zoom'
+  };
+
+  Plotly.newPlot('forecastChart', data, layout);
 </script>
 {% endblock %}

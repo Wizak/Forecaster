@@ -1,15 +1,15 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import tensorflow as tf
-import io
-import base64
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from sklearn.preprocessing import MinMaxScaler
+from datetime import timedelta
 
-def read_csv(file_stream):
-    """Read CSV and preprocess for alternate multivariate LSTM forecasting."""
-    data = pd.read_csv(file_stream)
-    data['ds'] = pd.to_datetime(data['date'])
-    data = data.rename(columns={'orders_count': 'y'})
+def read_csv(file_path):
+    data = pd.read_csv(file_path)
+    data['date'] = pd.to_datetime(data['date'])
+    data = data.rename(columns={'date':'ds','orders_count':'y'})
     data['is_holiday'] = data['is_holiday'].astype(int)
     data['dow'] = data['ds'].dt.dayofweek
     data['moy'] = data['ds'].dt.month
@@ -19,59 +19,46 @@ def read_csv(file_stream):
     data.fillna(method='ffill', inplace=True)
     return data
 
-def multivariate_data(dataset, target, history_size, target_size, step=1, single_step=True):
-    X, y = [], []
-    start = history_size
-    end = len(dataset) - target_size
-    for i in range(start, end):
-        indices = range(i-history_size, i, step)
-        X.append(dataset[indices])
-        if single_step:
-            y.append(target[i+target_size])
-        else:
-            y.append(target[i:i+target_size])
-    return np.array(X), np.array(y)
-
-def run_forecast(data):
-    """Alternate multivariate LSTM forecast with a different architecture."""
-    features = data[['dow', 'y', 'moy']]
-    dataset = features.values
-    TRAIN_SPLIT = int(len(dataset)*0.8)
-    data_mean = dataset[:TRAIN_SPLIT].mean(axis=0)
-    data_std = dataset[:TRAIN_SPLIT].std(axis=0)
-    norm_data = (dataset-data_mean)/data_std
+def run_forecast_table(data):
+    features = data[['dow','y','moy']].values
+    TRAIN_SPLIT = int(len(features)*0.8)
+    mean = features[:TRAIN_SPLIT].mean(axis=0)
+    std = features[:TRAIN_SPLIT].std(axis=0)
+    norm_data = (features-mean)/std
     history_size = 28
     future_target = 28
-    X, y = multivariate_data(norm_data, norm_data[:,1], history_size, future_target, single_step=True)
-    batch_size = 32
-    train_data = tf.data.Dataset.from_tensor_slices((X, y)).batch(batch_size)
-    
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.LSTM(64, return_sequences=True, input_shape=(history_size, X.shape[2])),
-        tf.keras.layers.LSTM(32, activation='relu'),
-        tf.keras.layers.Dense(future_target)
+    X,y = [],[]
+    for i in range(history_size, len(norm_data)-future_target):
+        X.append(norm_data[i-history_size:i])
+        y.append(norm_data[i+future_target-1,1])
+    X = np.array(X)
+    y = np.array(y)
+    model = Sequential([
+        LSTM(64, return_sequences=True, input_shape=(history_size, norm_data.shape[1])),
+        LSTM(32, activation='relu'),
+        Dense(future_target)
     ])
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001), loss='mae', metrics=['mse'])
-    model.fit(train_data, epochs=20, steps_per_epoch=TRAIN_SPLIT//batch_size, verbose=0)
-    
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001), loss='mae')
+    model.fit(X, y, epochs=20, batch_size=32, verbose=0)
+    mape_val = 0.0
     last_history = norm_data[-history_size:]
     last_history = np.expand_dims(last_history, axis=0)
     future_preds = model.predict(last_history)[0]
-    future_preds = future_preds * data_std[1] + data_mean[1]
-    future_index = pd.date_range(start=data.index[-1], periods=future_target+1, closed='right')
-    
-    plt.figure(figsize=(12,6))
-    plt.plot(data.index, data['y'], label='Actual')
-    plt.plot(future_index, future_preds, label='Forecast', linestyle='--')
-    plt.xlabel('Date')
-    plt.ylabel('Orders Count')
-    plt.title('Alternate Multivariate LSTM Forecast')
-    plt.legend()
-    plt.grid()
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plt.close()
-    img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-    dummy_mape = 0.0
-    return img_base64, dummy_mape
+    future_preds = future_preds*std[1]+mean[1]
+    last_date = data.index[-1]
+    dates = pd.date_range(start=last_date, periods=future_target+1, closed='right')
+    forecast_table = []
+    for d, val in zip(dates, future_preds):
+        forecast_table.append({
+            'ds': str(d.date()),
+            'yhat': float(val),
+            'yhat_lower': float(val*0.9),
+            'yhat_upper': float(val*1.1)
+        })
+    historical_table = []
+    for idx, row in data.iterrows():
+        historical_table.append({
+            'ds': str(idx.date()),
+            'y': float(row['y'])
+        })
+    return historical_table, forecast_table, mape_val

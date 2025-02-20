@@ -1,88 +1,80 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from sklearn.preprocessing import MinMaxScaler
-import io
-import base64
 
-FORECAST_START = '2024-11-01'
-FORECAST_END = '2024-11-30'
-SEQ_LENGTH = 30
+def read_csv(file_input):
+    df = pd.read_csv(file_input)
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.rename(columns={'date': 'ds', 'orders_count': 'y'})
+    df['dow'] = df['ds'].dt.dayofweek
+    df['doy'] = df['ds'].dt.dayofyear
+    df.sort_values(by=['ds', 'service'], inplace=True)
+    return df
 
-def read_csv(file_stream):
-    """Read CSV, add day-of-week and day-of-year features, and return raw data."""
-    data = pd.read_csv(file_stream)
-    data['ds'] = pd.to_datetime(data['date'])
-    data = data.rename(columns={'orders_count': 'y'})
-    data['dow'] = data['ds'].dt.dayofweek
-    data['doy'] = data['ds'].dt.dayofyear
-    # Expect a 'service' column for aggregation
-    data.sort_values(by=['ds', 'service'], inplace=True)
-    return data
+def preprocess_data(df):
+    sc = MinMaxScaler((0, 1))
+    arr = sc.fit_transform(df[['y','dow','doy','service']])
+    return arr, sc
 
-def preprocess_data(service_data):
-    """Scale features for one service."""
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    data_scaled = scaler.fit_transform(service_data[['y', 'dow', 'doy', 'service']])
-    return data_scaled, scaler
-
-def create_sequences(data, seq_length):
+def create_sequences(arr, seq_length):
     X, y = [], []
-    for i in range(len(data) - seq_length):
-        X.append(data[i:i+seq_length, :])
-        y.append(data[i+seq_length, 0])
+    for i in range(len(arr) - seq_length):
+        X.append(arr[i:i+seq_length, :])
+        y.append(arr[i+seq_length, 0])
     return np.array(X), np.array(y)
 
-def run_forecast(data):
-    """
-    Aggregate data by day and service, train a separate LSTM per service, and produce forecasts.
-    Returns a Base64 plot (for the first service) and a dummy MAPE.
-    (In a full implementation you might loop over all services.)
-    """
-    daily_data = data.groupby(['ds', 'service']).sum().reset_index()
-    # For demonstration, use the first unique service
-    unique_services = daily_data['service'].unique()
-    service = unique_services[0]
-    service_data = daily_data[daily_data['service'] == service].copy()
-    service_data.set_index('ds', inplace=True)
-    
-    scaler, data_scaled = None, None
-    data_scaled, scaler = preprocess_data(service_data)
-    X, y = create_sequences(data_scaled, SEQ_LENGTH)
-    
-    model = Sequential([
-        LSTM(50, activation='relu', input_shape=(SEQ_LENGTH, X.shape[2])),
-        Dense(1)
-    ])
-    model.compile(optimizer='adam', loss='mse')
-    model.fit(X, y, epochs=50, batch_size=32, verbose=0)
-    
-    # Forecast future period
-    forecast_steps = (pd.to_datetime(FORECAST_END) - pd.to_datetime(FORECAST_START)).days + 1
-    forecast_input = data_scaled[-SEQ_LENGTH:].copy()
-    forecast_values = []
-    for _ in range(forecast_steps):
-        pred = model.predict(forecast_input[np.newaxis, :, :])[0, 0]
-        forecast_values.append(pred)
-        next_input = np.hstack([pred, forecast_input[-1, 1:]]).reshape(1, -1)
-        forecast_input = np.append(forecast_input[1:], next_input, axis=0)
-    forecast_values = scaler.inverse_transform(np.hstack([np.array(forecast_values).reshape(-1, 1), np.zeros((forecast_steps, 3))]))[:, 0]
-    forecast_dates = pd.date_range(start=FORECAST_START, end=FORECAST_END)
-    
-    plt.figure(figsize=(14,8))
-    plt.plot(service_data.index, service_data['y'], label='Actual')
-    plt.plot(forecast_dates, forecast_values, label='Forecast', linestyle='--')
-    plt.xlabel('Date')
-    plt.ylabel('Orders Count')
-    plt.title(f'LSTM Aggregate Forecast for Service {service}')
-    plt.legend()
-    plt.grid()
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plt.close()
-    img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-    dummy_mape = 0.0  # For demonstration
-    return img_base64, dummy_mape
+def run_forecast_table(file_input, forecast_start, forecast_end):
+    seq_length = 30
+    epochs = 50
+    batch_size = 32
+    df = read_csv(file_input)
+    daily = df.groupby(['ds','service']).sum(numeric_only=True).reset_index()
+    services = daily['service'].unique()
+    result = []
+    for s in services:
+        sdf = daily[daily['service'] == s].copy()
+        arr, sc = preprocess_data(sdf)
+        X, y_seq = create_sequences(arr, seq_length)
+        if len(X) == 0:
+            continue
+        model = Sequential([
+            LSTM(50, activation='relu', input_shape=(seq_length, X.shape[2])),
+            Dense(1)
+        ])
+        model.compile(optimizer='adam', loss='mse')
+        model.fit(X, y_seq, epochs=epochs, batch_size=batch_size, verbose=1)
+        steps = (pd.to_datetime(forecast_end) - pd.to_datetime(forecast_start)).days + 1
+        fi = arr[-seq_length:].copy()
+        preds = []
+        for _ in range(steps):
+            p = model.predict(fi[np.newaxis, :, :])[0, 0]
+            preds.append(p)
+            ni = np.hstack([np.array([[p]]), fi[-1, 1:].reshape(1, -1)])
+            fi = np.append(fi[1:], ni, axis=0)
+        preds = sc.inverse_transform(np.hstack([np.array(preds).reshape(-1, 1), np.zeros((steps, 3))]))[:, 0]
+        fdates = pd.date_range(start=forecast_start, end=forecast_end)
+        forecast_series = {"type": f"forecast_service_{str(s)}", "data": []}
+        for dte, v in zip(fdates, preds):
+            forecast_series["data"].append({"x": str(dte.date()), "y": float(v)})
+        actual_series = {"type": f"actual_service_{str(s)}", "data": []}
+        for _, row in sdf.iterrows():
+            dte = pd.to_datetime(row['ds'])
+            actual_series["data"].append({"x": str(dte.date()), "y": float(row['y'])})
+        result.append(forecast_series)
+        result.append(actual_series)
+    # Normalize output data across all series
+    all_vals = []
+    for series in result:
+        for point in series["data"]:
+            all_vals.append(point["y"])
+    all_vals = np.array(all_vals).reshape(-1, 1)
+    out_scaler = MinMaxScaler((0, 1))
+    scaled_vals = out_scaler.fit_transform(all_vals)
+    idx = 0
+    for series in result:
+        for point in series["data"]:
+            point["y"] = float(scaled_vals[idx, 0])
+            idx += 1
+    return result
