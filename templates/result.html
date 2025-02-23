@@ -17,8 +17,10 @@
 
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <script>
+  var XAXIS = {{ xaxis|tojson }};
   var DATA = {{ data|tojson }};
   console.log(DATA)
+  console.log(XAXIS)
 
   function buildTrace(type, humanName, color, extraProps={}) {
     var filtered = DATA.find(item => item.type === type);
@@ -43,6 +45,11 @@
 
   var traceActual = buildTrace("actual", "Actual", "blue");
   var traceForecast = buildTrace("forecast", "Forecast", "green");
+  var traceTrueForecast = buildTrace("true_future", "True Future", "red");
+
+  var traceXGBForecast = buildTrace("xgb_forecast", "XGB Forecast", "green");
+  var traceProphetForecast = buildTrace("prophet_forecast", "Prophet Forecast", "green");
+  var traceCombinedForecast = buildTrace("combined_forecast", "Combined Forecast", "green");
 
   var traceActual1 = buildTrace("actual_1", "Actual 1", "blue");
   var traceActual2 = buildTrace("actual_2", "Actual 2", "blue");
@@ -74,6 +81,10 @@
     traceTestPred,
     traceActual,
     traceForecast,
+    traceXGBForecast,
+    traceProphetForecast,
+    traceCombinedForecast,
+    traceTrueForecast,
     traceActual1,
     traceActual2,
     traceActual3,
@@ -94,7 +105,7 @@
   ].filter(item => item !== false);
   
   var layout = {
-    xaxis: { title: 'Date', type: 'date' },
+    xaxis: XAXIS,
     yaxis: { title: 'Orders Count (normalized)' },
     dragmode: 'zoom'
   };

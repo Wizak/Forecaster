@@ -27,9 +27,11 @@
         <label for="datafile" class="form-label">CSV File:</label>
         <input class="form-control" type="file" name="datafile" id="datafile" accept=".csv" required>
       </div>
-      <div class="mb-3" id="prophetContainer" style="display: none;">
+      <div class="mb-3" id="cutOffContainer" style="display: none;">
         <label for="training_cutoff_date" class="form-label">Training Cutoff Date:</label>
         <input class="form-control" type="date" name="training_cutoff_date" id="training_cutoff_date">
+      </div>
+      <div class="mb-3" id="aheadContainer" style="display: none;">
         <label for="forecast_days_ahead" class="form-label mt-2">Forecast Days Ahead:</label>
         <input class="form-control" type="number" name="forecast_days_ahead" id="forecast_days_ahead" value="30">
       </div>
@@ -57,7 +59,8 @@
 </div>
 <script>
   const forecastSelect = document.getElementById('forecast_type');
-  const prophetContainer = document.getElementById('prophetContainer');
+  const cutOffContainer = document.getElementById('cutOffContainer');
+  const aheadContainer = document.getElementById('aheadContainer');
   const trainDatesContainer = document.getElementById('trainDatesContainer');
   const testDatesContainer = document.getElementById('testDatesContainer');
   const forecastDatesContainer = document.getElementById('forecastDatesContainer');
@@ -72,7 +75,8 @@
   function toggleFields() {
     const type = forecastSelect.value;
 
-    prophetContainer.style.display = "none";
+    cutOffContainer.style.display = "none";
+    aheadContainer.style.display = "none";
     trainDatesContainer.style.display = "none";
     testDatesContainer.style.display = "none";
     forecastDatesContainer.style.display = "none";
@@ -85,7 +89,8 @@
     forecastEndDate.removeAttribute('required');
 
     if (type === "prophet") {
-      prophetContainer.style.display = "block";
+      cutOffContainer.style.display = "block";
+      aheadContainer.style.display = "block";
     } else if (type === "lstm") {
       trainDatesContainer.style.display = "block";
       testDatesContainer.style.display = "block";
@@ -128,6 +133,13 @@
 
       forecastStartDate.setAttribute('required', true);
       forecastEndDate.setAttribute('required', true);
+    } else if (type === "lstm_multivariate_interval") {
+      forecastDatesContainer.style.display = "block";
+
+      forecastStartDate.setAttribute('required', true);
+      forecastEndDate.setAttribute('required', true);
+    } else if (type === "hybrid_prophet_xgboost") {
+      aheadContainer.style.display = "block";
     };
   };
 

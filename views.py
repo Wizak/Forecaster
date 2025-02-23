@@ -41,6 +41,7 @@ def forecast_route():
         flash("No file selected")
         return redirect(url_for('main.index'))
     mape_val = None
+    xaxis = { "title": "Date", "type": "date" }
     try:
         if forecast_type == "prophet":
             training_cutoff_date = request.form.get("training_cutoff_date")
@@ -112,10 +113,31 @@ def forecast_route():
         elif forecast_type == "lstm_multivariate":
             forecast_start = request.form.get("forecast_start_date")
             forecast_end = request.form.get("forecast_end_date")
+            xaxis = { "title": "Steps", "type": "linear" }
             data = lstm_multivariate_forecast.run_forecast_table(
                 file,
                 forecast_start=forecast_start,
                 forecast_end=forecast_end,
+            )
+        elif forecast_type == "lstm_multivariate_interval":
+            forecast_start = request.form.get("forecast_start_date")
+            forecast_end = request.form.get("forecast_end_date")
+            xaxis = { "title": "Steps", "type": "linear" }
+            data = lstm_multivariate_interval_forecast.run_forecast_table(
+                file,
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+            )
+        elif forecast_type == "lstm_multivariate_v2":
+            xaxis = { "title": "Steps", "type": "linear" }
+            data = lstm_multivariate_forecast_v2.run_forecast_table(
+                file,
+            )
+        elif forecast_type == "hybrid_prophet_xgboost":
+            forecast_days_ahead = request.form.get("forecast_days_ahead")
+            data = hybrid_prophet_xgboost_forecast.run_forecast_table(
+                file,
+                forecast_period=int(forecast_days_ahead) if forecast_days_ahead else 30,
             )
         else:
             flash("Invalid forecast approach selected.")
@@ -126,6 +148,7 @@ def forecast_route():
             'result.html',
             forecast_type=list(filter(lambda x: x["value"] == forecast_type, forecast_options))[0]["name"],
             data=data,
+            xaxis=xaxis,
             mape=mape_val,
             module_description=description
         )

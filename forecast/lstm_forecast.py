@@ -100,10 +100,10 @@ def run_forecast_table(
     merged_f = merged[merged['is_forecast']==True].copy()
     historical_table_norm = []
     for _, row in merged_h.iterrows():
-        historical_table_norm.append({'ds': row['ds'], 'y': float(row['val'])})
+        historical_table_norm.append({'x': row['ds'], 'y': float(row['val'])})
     forecast_table_norm = []
     for _, row in merged_f.iterrows():
-        forecast_table_norm.append({'ds': row['ds'], 'yhat': float(row['val'])})
+        forecast_table_norm.append({'x': row['ds'], 'y': float(row['val'])})
 
     data = [
         {
